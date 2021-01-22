@@ -1,1 +1,305 @@
-../iBlastoids_analyis.Rmd
+---
+title: "iBlastoids_analyis"
+author: "jibsch"
+date: "2020-08-21"
+output: workflowr::wflow_html
+editor_options:
+  chunk_output_type: inline
+---
+
+## Load Libraries
+
+```{r}
+library(Seurat)
+library(tidyverse)
+library(RColorBrewer)
+library(ggpubr)
+library(gridExtra)
+library(egg)
+library(org.Hs.eg.db)
+library(limma)
+library(scran)
+```
+
+
+## Helper Functions and Colour Palletes
+```{r}
+# Stroke and point size for marker and signature plots
+stroke = 0.3
+size = 0.15
+lines = 0.25
+```
+
+```{r}
+# Plotting function for marker genes
+marker_plot_plot = function(m, seurat) {
+    Embeddings(seurat, reduction = "umap") %>% as_tibble() %>% 
+  mutate(g = as.matrix(seurat@assays[[seurat@active.assay]][m,])[1,]) -> pdat
+  
+  ggplot() + 
+    geom_point(data = pdat[pdat$g<0,], aes(x=UMAP_1, y=UMAP_2), stroke=stroke, size=size, colour="lightgrey") +
+    geom_point(data = pdat[pdat$g>=0,], aes(x=UMAP_1, y=UMAP_2, color=g),  stroke=stroke, size=size) +
+ #    scale_color_gradientn(colours = rev(brewer.pal(n = 7, name =
+ # "RdYlBu"))) +
+     scale_color_gradientn(colours = c("lightgrey", rev(brewer.pal(n = 11, name =
+ "Spectral")[1:5]))) +
+    theme_classic() +
+    theme(legend.position = "bottom", legend.key.height = unit(0.5,"line"),
+          legend.spacing.x = unit(0.2, 'cm'),  
+          text = element_text(family = "Arial",size = 7),
+          legend.box.margin = margin(t=-0.4, unit = "cm")) +
+    labs(x="UMAP1", y="UMAP2", colour=m) -> p
+  
+  p
+}
+
+# Plotting function for gene signatures
+signature_scoring_plot_plot = function(sig, seurat) {
+  Embeddings(seurat, reduction = "umap") %>% as_tibble() %>% 
+  mutate(s = seurat@meta.data[,sig]) %>% 
+  ggplot(., aes(UMAP_1, UMAP_2)) + 
+    geom_point(aes(colour=s), stroke=stroke, size=size) +
+    scale_color_gradientn(colours = rev(brewer.pal(n = 10, name =
+ "RdYlBu"))) +
+    theme_classic() +
+    theme(legend.position = "bottom", legend.key.height = unit(0.5,"line"),
+          legend.spacing.x = unit(0.2, 'cm'),
+          text = element_text(family = "Arial",size = 7),
+          legend.box.margin = margin(t=-0.4, unit = "cm")) +
+    labs(x="UMAP1", y="UMAP2", colour=sig) -> p
+  p
+}
+
+# Plotting function for mutliple markers or signatures.
+# Sets panel size and arranges in a grid.
+marker_plot = function(type, genes, seurat, nrow) {
+  ps = list()
+  for(m in genes) {
+    if(type == "marker")
+      ps[[m]] = marker_plot_plot(m, seurat) + 
+      ggtitle(m) +
+      theme(text = element_text(family = "Arial",size = 7),
+          line = element_line(size=0.25), legend.position = "none",
+          axis.title.y = element_text(margin = margin(-0.4, unit = "cm")))
+    else if(type=="signature") {
+      ps[[m]] = signature_scoring_plot_plot(m, seurat) +
+        ggtitle(m) + 
+        theme(legend.position = "none")
+    }
+  }
+  grid.arrange(grobs = lapply(
+  ps,
+  set_panel_size,
+  width = unit(2.5, "cm"),
+  height = unit(2.5, "cm")
+  ),nrow=nrow) -> p
+}
+
+
+```
+
+
+```{r}
+iBlastoid_colours = c("EPI_iBlastoids" = "#63B8FF", 
+            "PE_iBlastoids" = "limegreen",
+            "TE_iBlastoids" = "#FF83FA", 
+            "IM1_iBlastoids" = "#8B1A1A", "IM2_iBlastoids" = "#FF3030", 
+            "IM3_iBlastoids" = "#F08080",
+            "NR_iBlastoids" = "black")
+```
+
+
+## iBlastoid analysis
+
+### Load and assign donors
+```{r}
+# Load RNA-seq counts and create Seurat object
+seurat_iblastoids = CreateSeuratObject(Read10X("../data/RL2157_2020_06_24_20_2175_32F38F1_scRNAseq/RL2157_all/outs/filtered_feature_bc_matrix/"), min.cells = 0, min.features = 0, project = "iBlastoids")
+
+# Calculate MT gene percentage per cell
+seurat_iblastoids[["percent.mt"]] <- PercentageFeatureSet(seurat_iblastoids, pattern = "^MT-")
+
+# Load table of cell line donors
+donors = read_tsv("~/projects/Ethan_iBlastoids/data/donor_ids.tsv")
+
+summary(row.names(seurat_iblastoids@meta.data) == donors$cell)
+
+#Assign donors to cells and discard doublets/unassigned
+
+seurat_iblastoids$donor = donors$donor_id
+seurat_iblastoids = seurat_iblastoids[,donors$donor_id!="doublet" & donors$donor_id!="unassigned"]
+
+```
+
+### Plot per cell statistics' distributions and filter
+```{r}
+ggplot(seurat_iblastoids@meta.data, aes(nFeature_RNA, ..density..)) +
+  geom_density(aes(colour=orig.ident)) + 
+  geom_vline(xintercept = 1300, linetype="dashed") +
+  theme_classic()
+
+ggplot(seurat_iblastoids@meta.data, aes(percent.mt, ..density..)) +
+  geom_density(aes(colour=orig.ident)) + 
+  geom_vline(xintercept = 15, linetype="dashed") +
+  theme_classic()
+
+seurat_iblastoids = seurat_iblastoids[,seurat_iblastoids$percent.mt < 15 &
+                                     seurat_iblastoids$nFeature_RNA > 1300 ]
+```
+
+### Plot gene expression statistic and filter
+```{r}
+genes_in_cells_1 = rowSums(as.matrix(seurat_iblastoids@assays$RNA@counts) >0)
+ggplot(data.frame(c=genes_in_cells_1), aes(c+1,..density..)) + 
+  geom_density()+
+  geom_vline(xintercept = 50, linetype="dashed") +
+  scale_x_continuous(trans = "log10") +
+  theme_classic() +
+  labs(x="gene in #cells + 1")
+
+seurat_iblastoids = seurat_iblastoids[genes_in_cells_1 > 50, ]
+```
+
+### Process single cell data
+```{r}
+# Run SCTransform for normalisation and scaling
+seurat_iblastoids = SCTransform(seurat_iblastoids)
+```
+
+```{r}
+# Dimensionality reductions
+seurat_iblastoids = RunPCA(seurat_iblastoids, verbose = FALSE)
+ElbowPlot(seurat_iblastoids)
+seurat_iblastoids = RunUMAP(seurat_iblastoids, dims = 1:20)
+DimPlot(seurat_iblastoids, reduction = "umap")
+```
+
+### Plot Marker Genes
+
+```{r}
+marker_plot("marker", c("POU5F1", "CDX2", "SOX17", "NANOG","GATA2", "GATA6"), 
+            seurat_iblastoids, 2)
+```
+
+
+### Calculate and plot gene signatures
+```{r}
+# Load gene signatures
+nature_sig = read.table("../data/suppTable03.tab", 
+           header=TRUE, sep="\t", as.is = TRUE)
+nature_sig.list = split(nature_sig$geneName, f=factor(nature_sig$module))
+
+petro_sig = read.table("~/projects/Ethan_iBlastoids/data/suppTable12.tab", 
+           header=TRUE, sep="\t", as.is = TRUE)
+
+petro_sig.list = split(petro_sig$geneName, f=factor(petro_sig$type))
+```
+
+```{r}
+# Calculate scores 
+seurat_iblastoids = AddModuleScore(seurat_iblastoids, 
+                                   features = petro_sig.list, 
+                                   name = names(petro_sig.list))
+names(seurat_iblastoids@meta.data) = gsub("[0-9]*$","",
+                                          names(seurat_iblastoids@meta.data))
+seurat_iblastoids = AddModuleScore(seurat_iblastoids, 
+                                   features = nature_sig.list["nonReprog1"], 
+                                   name = "nonReprog1")
+names(seurat_iblastoids@meta.data)[20] = "nonReprog1"
+```
+
+```{r}
+marker_plot("signature", c("ALL.EPI", "ALL.TE", "ALL.PE"),
+            seurat_iblastoids, 3)
+```
+
+### Clustering
+```{r}
+seurat_iblastoids = FindNeighbors(seurat_iblastoids, dims = 1:20)
+
+seurat_iblastoids = FindClusters(seurat_iblastoids, resolution = 0.2)
+
+DimPlot(seurat_iblastoids, label=TRUE)
+```
+```{r}
+#Assign cell types according to markers and signatures
+seurat_iblastoids$celltype = factor(recode(seurat_iblastoids$seurat_clusters,
+                                    "3" = "EPI_iBlastoids", "2" = "TE_iBlastoids",
+                                    "1" = "PE_iBlastoids", "0" = "IM1_iBlastoids",
+                                    "4" = "IM2_iBlastoids", "6" = "IM3_iBlastoids",
+                                    "5" = "NR_iBlastoids"))
+seurat_iblastoids$celltype = factor(seurat_iblastoids$celltype, 
+                                    levels = levels(seurat_iblastoids$celltype)[
+                                      c(4,3,2,1,5,7,6)
+                                    ])
+seurat_iblastoids = SetIdent(seurat_iblastoids, value = "celltype")
+
+
+
+Embeddings(seurat_iblastoids, reduction = "umap") %>% as_tibble() %>%
+  mutate(ct = factor(seurat_iblastoids$celltype)) %>%
+  ggplot(., aes(UMAP_1, UMAP_2)) +
+  geom_point(aes(colour=ct), stroke=stroke, size=size) +
+  theme_classic() + 
+  scale_color_manual(values = iBlastoid_colours) +
+  labs(x="UMAP1", y="UMAP2", colour=element_blank()) +
+  ggtitle("Cell clusters") +
+  theme(legend.position = "bottom",  legend.key.size = unit(0.3, "cm"), 
+        legend.margin = margin(l=-0.45,  t=-0.3, unit = "cm"),
+        text = element_text(family = "Arial", size = 6),
+        legend.spacing.x = unit(-0.05,"cm"),
+        
+        line = element_line(size = lines),
+        plot.margin = margin(l=-0.1, unit = "cm")) +
+        guides(colour = guide_legend(ncol = 2, 
+                                     override.aes = list(size = 1.5) ))-> p
+
+
+grid.arrange(grobs = lapply(
+list(p),
+set_panel_size,
+width = unit(2.5, "cm"),
+height = unit(2.5, "cm")
+),nrow=1) -> p
+
+
+
+```
+### Cluster Marker Genes
+```{r}
+iBlastoids_cluster_markers = FindAllMarkers(seurat_iblastoids, only.pos = TRUE)
+```
+```{r}
+iBlastoids_cluster_markers$entrez = mapIds(org.Hs.eg.db,
+                                           iBlastoids_cluster_markers$gene,
+                                           "SYMBOL", column = "ENTREZID")
+
+
+```
+
+
+### Cell Cycle
+```{r}
+
+
+hs.pairs <- readRDS(system.file("exdata", "human_cycle_markers.rds", package="scran"))
+
+sse = Seurat::as.SingleCellExperiment(seurat_iblastoids)
+
+g = mapIds(org.Hs.eg.db, row.names(sse), keytype = "SYMBOL", column = "ENSEMBL")
+
+row.names(sse) = g
+
+assigned <- cyclone(sse, pairs=hs.pairs)
+rm(sse)
+
+head(assigned$scores)
+table(assigned$phases, seurat_iblastoids$celltype)
+
+seurat_iblastoids$phase = assigned$phases
+
+```
+
+
+
+
