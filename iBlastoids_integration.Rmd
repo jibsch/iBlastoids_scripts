@@ -1,0 +1,107 @@
+---
+title: "iBlastoids_integration"
+author: "jibsch"
+date: "2021-01-23"
+output: workflowr::wflow_html
+editor_options:
+  chunk_output_type: inline
+---
+
+## Integrate all data
+
+```{r}
+seurat_d6 = readRDS("../output/seurat_iblastoids.Rds")
+seurat_pet3 = readRDS("../output/seurat_pet3.Rds")
+blake  = readRDS("../output/blake.Rds")
+```
+
+
+
+### Remove NR and Integrate
+
+```{r}
+seurat_d6_noNR = seurat_iblastoids[,seurat_iblastoids$celltype!="NR_iBlastoids"]
+
+blast.list = list("iBlast" = seurat_d6_noNR, "blake" = blake,   "pet" = seurat_pet3 )
+
+blast.features <- SelectIntegrationFeatures(object.list = blast.list, nfeatures = 4000)
+blast.list <- PrepSCTIntegration(object.list = blast.list, anchor.features = blast.features, 
+    verbose = FALSE)
+```
+
+```{r}
+blast.anchors <- FindIntegrationAnchors(object.list = blast.list, normalization.method = "SCT", 
+    anchor.features = blast.features, verbose = FALSE, dims = 1:14, 
+    k.filter = 29, k.score = 29)
+blast.integrated_d6_blake_pet_noNR <- IntegrateData(anchorset = blast.anchors, normalization.method = "SCT", 
+    verbose = FALSE)
+```
+
+```{r}
+blast.integrated_d6_blake_pet_noNR = RunPCA(blast.integrated_d6_blake_pet_noNR, verbose = FALSE)
+DimPlot(blast.integrated_d6_blake_pet_noNR, reduction = "pca", group.by = "orig.ident")
+
+blast.integrated_d6_blake_pet_noNR = RunUMAP(blast.integrated_d6_blake_pet_noNR, dims=1:20)
+DimPlot(blast.integrated_d6_blake_pet_noNR, reduction = "umap", group.by = "orig.ident")
+
+DimPlot(blast.integrated_d6_blake_pet_noNR, reduction = "umap", group.by = "celltype", label = TRUE) ->p1
+
+DimPlot(blast.integrated_d6_blake_pet_noNR, reduction = "umap", group.by = "group", label = TRUE) ->p2
+
+CombinePlots(list(p1,p2))
+```
+
+```{r}
+blast.integrated_d6_blake_pet_noNR$original_id =
+factor(ifelse(blast.integrated_d6_blake_pet_noNR$orig.ident == "iBlastoids",
+#as.character(blast.integrated_d6_blake_pet$cell_type),
+as.character(blast.integrated_d6_blake_pet_noNR$celltype),
+as.character(blast.integrated_d6_blake_pet_noNR$group %>% gsub("Epi", "EPI",.))))
+
+n = blast.integrated_d6_blake_pet_noNR$original_id
+blast.integrated_d6_blake_pet_noNR$type = ifelse(grepl("pre",n), "Pre_Blast",
+ifelse(grepl("TE", n), "TE",
+ifelse(grepl("PE", n), "PE",
+ifelse(grepl("EPI",n), "EPI", "IM"))))
+
+```
+
+
+```{r}
+blast.integrated_d6_blake_pet_noNR = FindNeighbors(blast.integrated_d6_blake_pet_noNR, dims = 1:20)
+
+blast.integrated_d6_blake_pet_noNR = FindClusters(blast.integrated_d6_blake_pet_noNR, resolution = 0.2)
+
+DimPlot(blast.integrated_d6_blake_pet_noNR, label = TRUE)
+```
+```{r}
+blast.integrated_d6_blake_pet_noNR$cluster_int = factor(recode(blast.integrated_d6_blake_pet_noNR$seurat_clusters,
+                                 "2" = "Int_EPI", "1" = "Int_PE", "0" = "Int_TE",
+                                "3" = "Int_IM1", "4" = "Int_IM2"), levels =
+                                  c("Int_EPI", "Int_TE", "Int_PE", "Int_IM1",
+                                    "Int_IM2"))
+```
+
+```{r}
+blast.integrated_d6_blake_pet_noNR = AddModuleScore(blast.integrated_d6_blake_pet_noNR, features = petro_sig.list[c("ALL-PE", "ALL-TE", "ALL-PE")], name = c("EPI", "TE", "PE"))
+names(blast.integrated_d6_blake_pet_noNR@meta.data) = gsub("[123]$","", names(blast.integrated_d6_blake_pet_noNR@meta.data))
+```
+
+```{r}
+blast.integrated_d6_blake_pet_noNR@meta.data = blast.integrated_d6_blake_pet_noNR@meta.data[,c("orig.ident", "seurat_clusters", "original_id", "cluster_int", "EPI", "TE", "PE")]
+```
+
+
+
+```{r}
+blast.integrated_d6_blake_pet_noNR$type = 
+  ifelse(grepl("EPI", blast.integrated_d6_blake_pet_noNR$original_id), 
+         "EPI",
+         ifelse(grepl("TE", blast.integrated_d6_blake_pet_noNR$original_id),
+                "TE",
+                ifelse(grepl("PE", blast.integrated_d6_blake_pet_noNR$original_id),
+                       "PE","IM")))
+```
+
+
+
