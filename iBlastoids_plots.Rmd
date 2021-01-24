@@ -1,0 +1,1043 @@
+---
+title: "13_Ethan_iBlastoids_SC_plots3"
+author: "jibsch"
+date: "2020-08-18"
+output: workflowr::wflow_html
+editor_options:
+  chunk_output_type: console
+---
+
+## Load Libraries and Data
+
+```{r}
+library(Seurat)
+library(tidyverse)
+library(RColorBrewer)
+library(ggpubr)
+library(gridExtra)
+library(egg)
+```
+
+```{r}
+library(extrafont)
+font_import(paths = "~/projects/Ethan_iBlastoids/data", pattern = "arial.ttf")
+loadfonts()
+```
+
+
+```{r}
+stroke = 0.3
+size = 0.15
+lines = 0.25
+```
+
+
+## Theme
+```{r}
+theme_panel<- function(){ 
+    font <- "Arial"   #assign font family up front
+    
+    theme_classic() %+replace%    #replace elements we want to change
+    
+    theme(
+      
+      #text elements
+      plot.title = element_text(             #title
+                   family = font,            #set font family
+                   size = 7,                #set font size
+                  # face = 'bold',            #bold typeface
+                   hjust = 0),               #raise slightly
+      
+      axis.title = element_text(             #axis titles
+                   family = font,            #font family
+                   size = 7),               #font size
+      
+      axis.text = element_text(              #axis text
+                   family = font,            #axis famuly
+                   size = 6),                #font size
+      
+      legend.text = element_text(             #legend items
+                   family = font,            #font family
+                   size = 7),                #font size
+      
+      line = element_line(size=lines)
+    )
+}
+```
+
+
+## Marker Plot Function
+```{r}
+marker_plot_plot = function(m, seurat) {
+    Embeddings(seurat, reduction = "umap") %>% as_tibble() %>% 
+  mutate(g = as.matrix(seurat@assays[[seurat@active.assay]][m,])[1,]) -> pdat
+  
+  ggplot() + 
+    geom_point(data = pdat[pdat$g<0,], aes(x=UMAP_1, y=UMAP_2), stroke=stroke, size=size, colour="lightgrey") +
+    geom_point(data = pdat[pdat$g>=0,], aes(x=UMAP_1, y=UMAP_2, color=g),  stroke=stroke, size=size) +
+ #    scale_color_gradientn(colours = rev(brewer.pal(n = 7, name =
+ # "RdYlBu"))) +
+     scale_color_gradientn(colours = c("lightgrey", rev(brewer.pal(n = 11, name =
+ "Spectral")[1:5]))) +
+    theme_panel() +
+    theme(legend.position = "bottom", legend.key.height = unit(0.5,"line"),
+          legend.spacing.x = unit(0.2, 'cm'),  
+          legend.box.margin = margin(t=-0.4, unit = "cm")) +
+    labs(x="UMAP1", y="UMAP2", colour=m) -> p
+  
+  p
+}
+
+signature_scoring_plot_plot = function(sig, seurat) {
+  Embeddings(seurat, reduction = "umap") %>% as_tibble() %>% 
+  mutate(s = seurat@meta.data[,sig]) %>% 
+  ggplot(., aes(UMAP_1, UMAP_2)) + 
+    geom_point(aes(colour=s), stroke=stroke, size=size) +
+    scale_color_gradientn(colours = rev(brewer.pal(n = 10, name =
+ "RdYlBu"))) +
+    theme_classic() +
+    theme(legend.position = "bottom", legend.key.height = unit(0.5,"line"),
+          legend.spacing.x = unit(0.2, 'cm'),
+          line = element_line(size=lines),
+          text = element_text(family = "Arial",size = 7),
+          legend.box.margin = margin(t=-0.4, unit = "cm")) +
+    labs(x="UMAP1", y="UMAP2", colour=sig) -> p
+  p
+}
+```
+
+
+
+
+
+
+## Figure 2c - iBlast UMAP
+```{r}
+d6_cols = c("EPI_iBlastoids" = "#63B8FF", 
+            "PE_iBlastoids" = "limegreen",
+            "TE_iBlastoids" = "#FF83FA", 
+            "IM1_iBlastoids" = "#8B1A1A", "IM2_iBlastoids" = "#FF3030", 
+            "IM3_iBlastoids" = "#F08080",
+            "NR_iBlastoids" = "black")
+
+
+
+Embeddings(seurat_iblastoids, reduction = "umap") %>% as_tibble() %>%
+  mutate(ct = factor(seurat_iblastoids$celltype)) %>%
+  #mutate(ct = factor(ct, levels=levels(ct)[c(2,9,10,1,8,5,4,3,7,6,11)])) %>% 
+  ggplot(., aes(UMAP_1, UMAP_2)) +
+  geom_point(aes(colour=ct), stroke=stroke, size=size) +
+  ggtitle("Cell clusters") +
+  scale_color_manual(values = d6_cols) +
+  labs(x="UMAP1", y="UMAP2", colour=element_blank()) +
+  theme_panel() + 
+  theme(legend.position = "right",  legend.key.size = unit(0.3, "cm"), 
+        legend.margin = margin(l=-0.45,  unit = "cm"),
+        legend.spacing.x = unit(-0.05,"cm"),
+        plot.margin = margin(l=-0.1, unit = "cm")) +
+        guides(colour = guide_legend(ncol = 1, 
+                                     override.aes = list(size = 1.5) ))-> p;p
+
+
+grid.arrange(grobs = lapply(
+list(p),
+set_panel_size,
+width = unit(2.5, "cm"),
+height = unit(2.5, "cm")
+),nrow=1) -> p
+
+ggsave(p, width = 5.5, height = 3.8, units = "cm", filename = 
+           "../plots3/Fig2_iBlast_umap.pdf")
+  
+```
+
+
+
+## Supp Figure 7a - Integrated UMAP
+```{r}
+integrated_cols = c("Int_EPI" = "#4169E1", 
+            "Int_PE" = "#698B22", 
+            "Int_TE" = "#A020F0", 
+            "Int_IM1" = "#8B1A1A", "Int_IM2" = "#FF3030", "Int_IM3" = "#F08080",
+            "Int_nonReprog" = "black")
+
+# blast.integrated_d6_blake_pet_noNR$cluster_int = factor(recode(blast.integrated_d6_blake_pet_noNR$seurat_clusters,
+#                                  "2" = "Int_EPI", "1" = "Int_PE", "0" = "Int_TE",
+#                                 "3" = "Int_IM1", "4" = "Int_IM2"), levels = 
+#                                   c("Int_EPI", "Int_TE", "Int_PE", "Int_IM1",
+#                                     "Int_IM2"))
+
+Embeddings(blast.integrated_d6_blake_pet_noNR, reduction = "umap") %>% as_tibble() %>%
+  mutate(ct = blast.integrated_d6_blake_pet_noNR$cluster_int) %>%
+  ggplot(., aes(UMAP_1, UMAP_2)) +
+  geom_point(aes(colour=ct),  stroke=stroke, size=size) +
+  scale_color_manual(values = integrated_cols) +
+  #ggtitle("Cell clusters") +
+  labs(x="UMAP1", y="UMAP2", colour=element_blank()) +
+  theme_panel() + 
+  theme(legend.position = "right",
+        legend.key.size = unit(0.3, "cm"),
+        legend.spacing.x = unit(0.05, "cm"),
+        legend.margin = margin( l=-0.4, unit = "cm"),
+        plot.margin = margin(l=-0.1, unit = "cm")) +
+        guides(colour = guide_legend(ncol = 1, 
+                                     override.aes = list(size = 1.5) ))-> p;p
+
+grid.arrange(grobs = lapply(
+list(p),
+set_panel_size,
+width = unit(2.5, "cm"),
+height = unit(2.5, "cm")
+),nrow=1) -> p
+
+ggsave(p, width = 5.5, height = 3.8, units = "cm", filename = 
+           "../plots3/SuppFig7_integrated_umap.pdf")
+```
+
+
+## Supp Figure 7b - Integrated Cluster Percentage
+```{r}
+blast.integrated_d6_blake_pet_noNR@meta.data %>%
+  group_by(orig.ident, type) %>% mutate(tot=n()) %>% ungroup() %>% 
+  group_by(cluster_int, type, orig.ident) %>% 
+  dplyr::summarise(f=n()/tot[1]*100) %>% 
+  mutate(type = factor(type, levels=c("EPI", "TE", "PE", "IM"))) %>% 
+  ungroup %>% 
+  complete(., cluster_int, type, orig.ident, fill = list(f=0)) %>% 
+  ggplot(., aes(cluster_int, f)) + 
+  geom_bar(stat="identity", aes(fill=type), 
+           position = position_dodge2(width = 0.9, preserve = "single"),
+           colour = "black")  +
+  facet_wrap(~orig.ident, ncol=1, strip.position = "top") +
+  scale_fill_manual(values = c("#4169E1", "#A020F0", "#698B22", "darkgrey")) +
+  theme_panel() + 
+  theme(legend.position = "top", 
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.key.height = unit(0.5,"line"),
+        legend.key.width  = unit(0.5,"line"),
+        strip.background = element_blank(), strip.text = element_text(hjust = 0)) +
+  labs(x=element_blank(), y="% cells in each cluster", fill=element_blank()) +
+  scale_y_continuous(breaks = c(0,50,100))->p;p
+
+ggsave("../plots3/SuppFig7_integration_cluster_percentage.pdf", width = 5.5, height = 8, units = "cm")
+#ggsave("plots3/Fig2_integration_cluster_percentage3.pdf", width = 11.5, height = 5.5, units = "cm")
+```
+
+
+```{r}
+integrated@meta.data %>%
+  group_by(orig.ident, type) %>% mutate(tot=n()) %>% ungroup() %>% 
+  group_by(cluster_int, type, orig.ident) %>% 
+  dplyr::summarise(f=n()/tot[1]*100) %>% 
+  mutate(type = factor(type, levels=c("EPI", "TE", "PE", "IM"))) %>% 
+  ungroup %>% 
+  complete(., cluster_int, type, orig.ident, fill = list(f=0)) %>% 
+  write.csv(., file = "../output/soft_data_table_integrated_proportions.csv", 
+            quote = FALSE, row.names = FALSE)
+```
+
+## Figure 2f,g - Mural Polar Signatures TE - iBlast
+```{r}
+TE = readRDS("../output/seurat_d6_TE.Rds")
+ps = list()
+for(m in c("mural_E6_100_0.01", "polar_E6_100_0.01")) {
+  ps[[m]] = signature_scoring_plot_plot(sig = m, TE) + 
+    ggtitle(gsub("_E6_100_0.01","",m)) +
+    theme_panel() +
+    theme(legend.position = "none",
+          axis.title.y = element_text(margin = margin(-0.4, unit = "cm")),
+          plot.margin = margin(b=0,unit = "cm"))
+}
+grid.arrange(grobs = lapply(
+ps,
+set_panel_size,
+width = unit(2.5, "cm"),
+height = unit(2.5, "cm")
+),nrow=1) -> p
+ggsave(p, filename = "../plots3/Fig2_mural_polar_sig_iBlast.pdf", height = 3.8, width = 7.5 , units = "cm")
+```
+
+```{r}
+t = TE@meta.data[,c("mural_E6_100_0.01", "polar_E6_100_0.01")]
+names(t) = c("mural", "polar")
+t = cbind(Embeddings(TE, reduction = "umap"), t)
+write.csv(t, quote = FALSE, file = "../output/soft_data_table_TE_mural_polar.csv")
+```
+
+```{r}
+library(openxlsx)
+wb = createWorkbook()
+addWorksheet(wb, "TE_mural_polar_expression")
+addWorksheet(wb, "mural_signature")
+addWorksheet(wb, "polar_signature")
+writeData(wb, 1, t, rowNames = TRUE)
+writeData(wb, 2, mural_polar3[mural_polar3$signature == "mural",1], rowNames = FALSE)
+writeData(wb, 3, mural_polar3[mural_polar3$signature == "polar",1], rowNames = FALSE)
+
+saveWorkbook(wb, "../output/soft_data_table_TE_mural_polar.xlsx", overwrite = TRUE)
+```
+
+
+
+
+## Figure 2d - integrated UMAP - tracing
+```{r}
+cols = c(brewer.pal(9, "Blues")[9], brewer.pal(9, "Blues")[3], brewer.pal(9, "Blues")[7],
+         "darkgrey", 
+         brewer.pal(9, "Greens")[9], brewer.pal(9, "Greens")[3], brewer.pal(9, "Greens")[7], 
+         "#ff83fa", "#c583ff", "purple"   )
+#names(cols) = levels(l)
+
+Embeddings(blast.integrated_d6_blake_pet_noNR, reduction = "umap") %>% 
+  as_tibble() %>%
+  mutate(lib = blast.integrated_d6_blake_pet_noNR$orig.ident,
+         group = paste(blast.integrated_d6_blake_pet_noNR$type,
+                       blast.integrated_d6_blake_pet_noNR$orig.ident, 
+                       sep="_")) -> plot_data
+
+ggplot() + 
+  geom_point(data = plot_data %>% filter(lib == "iBlastoids"),
+             aes(x=UMAP_1, y=UMAP_2,colour=group, shape=group), 
+             size= 0.5) +
+  geom_point(data = plot_data %>% filter(lib == "Petropolous"),
+             aes(x=UMAP_1, y=UMAP_2, shape=group), 
+            colour="black", size = 1.25) +
+  geom_point(data = plot_data %>% filter(lib == "Petropolous"),
+             aes(x=UMAP_1, y=UMAP_2,colour=group, shape=group), 
+            size = 0.9) +
+
+   geom_point(data = plot_data %>% filter(lib == "Blakeley"),
+             aes(x=UMAP_1, y=UMAP_2,shape = group),
+                 colour="black", size=2.1) +
+  geom_point(data = plot_data %>% filter(lib == "Blakeley"),
+             aes(x=UMAP_1, y=UMAP_2,colour=group, shape=group),
+                size=1.75) +
+  theme_panel() +
+  #scale_color_gradientn(colours = rev(rainbow(7)[1:6])) +
+  scale_color_manual(values = cols) +
+  scale_shape_manual(values = c("square", "circle", "triangle", "circle",
+                                "square", "circle", "triangle", 
+                                "square", "circle", "triangle")) +
+  labs( x="UMAP1", y="UMAP2") +
+  theme(legend.position = "right",
+        legend.margin = margin(l=-0.4, unit = "cm"),
+        legend.key.size = unit(0.3, "cm")) -> p; p
+
+ggsave(p, filename = "../plots3/Fig2_integrated_umap_tracing.pdf",
+       width = 9, height=6.5, units = "cm")
+```
+
+
+## SuppFig 7c - Integrated Correlation Heatmap
+
+```{r}
+as.matrix(blast.integrated_d6_blake_pet_noNR@assays$integrated@data) %>%
+  as_tibble(rownames = "gene") %>% 
+  gather("cell", "value", -gene) %>% 
+  left_join(data.frame(cell =
+                         row.names(blast.integrated_d6_blake_pet_noNR@meta.data), 
+                       oid = blast.integrated_d6_blake_pet_noNR$original_id,
+                       type = paste(blast.integrated_d6_blake_pet_noNR$type,
+                                    blast.integrated_d6_blake_pet_noNR$orig.ident, 
+                                    sep="_"),
+                       lib = blast.integrated_d6_blake_pet_noNR$orig.ident
+                       )) -> x
+
+x %>% mutate(id = ifelse(lib=="iBlastoids", 
+                         as.character(oid), 
+                         as.character(paste(oid, lib, sep="_")))) %>%
+  group_by(id, gene) %>% summarise(value=mean(value)) %>%  
+  spread(key = "id", value = "value") -> y
+
+n= names(y)[-1]
+anno = ifelse(grepl("pre",n), "Pre_Blast",
+        ifelse(grepl("TE", n), "TE",
+              ifelse(grepl("PE", n), "PE",
+                     ifelse(grepl("EPI",n), "EPI", "IM"))))
+
+cor_n = cor(y[,-1], method="pearson")
+pheatmap::pheatmap(cor_n, annotation_col =  data.frame(row.names = n, type=factor(anno)), 
+                   annotation_colors = list("type" = 
+                                              c("EPI" = unname(integrated_cols["Int_EPI"]),
+                                                "IM" = "lightgrey", 
+                                                "PE"= unname(integrated_cols["Int_PE"]),
+                                                "TE" = unname(integrated_cols["Int_TE"]) )), clustering_method = "complete", 
+                   cutree_rows = 4, cutree_cols = 4, 
+                   treeheight_col = 25, treeheight_row = 25, fontsize = 7, 
+                   filename = "../plots3/SuppFig7_Correlation_Heatmap.pdf")
+```
+
+## Soft Data Correlation 1
+```{r}
+write.csv(cor_n, quote = FALSE, file = "../output/soft_data_table_correlation_group.csv")
+```
+
+## Figure 2e - Correlation Heatmap
+
+```{r}
+x %>% group_by(type, gene) %>% summarise(value=mean(value)) %>% 
+  spread(key = "type", value = "value") -> z
+cor = cor(z[,-1])
+pheatmap::pheatmap(cor, cutree_rows = 4, cutree_cols = 4, 
+                   treeheight_col = 15, treeheight_row = 15, fontsize = 7,
+                  # cellheight = 7,
+                   width = 9/cm(1), height = 6/cm(1), 
+                   filename = "../plots3/Fig2_Correlation_Heatmap.pdf")
+```
+
+## Soft Data Correlation 2
+```{r}
+write.csv(cor, quote = FALSE, file = "../output/soft_data_table_correlation_type.csv")
+```
+
+## Figure 2a - Markers - iBlast
+```{r}
+ps = list()
+for(m in c("POU5F1", "CDX2", "SOX17", "NANOG","GATA2", "GATA6")) {
+  ps[[m]] = marker_plot_plot(m, seurat_iblastoids) + 
+    ggtitle(m) +
+    theme_panel()+
+    theme(
+          legend.position = "none",
+            axis.title.y = element_text(margin = margin(-0.4, unit = "cm"))
+          )
+}
+grid.arrange(grobs = lapply(
+ps,
+set_panel_size,
+width = unit(2.5, "cm"),
+height = unit(2.5, "cm")
+),nrow=2) -> p
+ggsave(p, filename = "../plots3/Fig2_multi_marker_iBlast.pdf", height = 7.2, width = 12.5, units = "cm")
+```
+
+
+## Figure 2b - Petropolous Signatures - iBlast
+```{r}
+ps = list()
+for(m in c("ALL.EPI", "ALL.TE", "ALL.PE", "nonReprog1")) {
+  ps[[m]] = signature_scoring_plot_plot(sig = m, seurat_d6) + 
+    #ggtitle(m) +
+    theme_panel() +
+    theme(legend.position = "none",
+          axis.title.y = element_text(margin = margin(-0.4, unit = "cm")),
+          plot.margin = margin(b=0,unit = "cm"))
+}
+grid.arrange(grobs = lapply(
+ps[1:3],
+set_panel_size,
+width = unit(2.5, "cm"),
+height = unit(2.5, "cm")
+),nrow=1) -> p
+ggsave(p, filename = "../plots3/Fig2_multi_sig_iBlast.pdf", height = 3.8, width = 11 , units = "cm")
+
+plotto_panel_it(ps) -> p
+ggsave(p, filename = "../plots3/Fig2_multi_sig_iBlast.pdf", height = 3.8, width = 11 , units = "cm")
+```
+
+
+
+## Supp Figure 7g - Mural Polar Signatures TE Histogram - iBlast
+```{r}
+Embeddings(TE, reduction = "umap") %>% 
+  cbind(scale(TE@meta.data[,c("mural_E6_100_0.01","polar_E6_100_0.01")])) %>% as_tibble() %>%
+  gather(key = "subtype", value = "value",-UMAP_1, -UMAP_2) %>%
+  mutate(st = recode(subtype,  "mural_E6_100_0.01" = "mural",
+                     "polar_E6_100_0.01" = "polar")) %>%
+  ggplot(aes(UMAP_1,..count.., weight=value)) +
+  geom_histogram(bins=50, aes(fill=subtype),  alpha=0.5) +
+  facet_wrap(~st, scales = "free_y", ncol = 1) +
+  scale_fill_manual(values = mcolor) +
+  labs(x="UMAP1", y="binned subtype score") +
+  theme_panel() +
+  theme(legend.position = "none", strip.text = element_text(margin = margin(0.02,-0.5,0.02,-0.5, "cm")),
+        strip.background = element_rect(linetype = "blank")) -> p; p
+
+ggsave(p, filename = "../plots3/SuppFig7_mural_polar_sig_histogram_iBlast.pdf", width = 5.5, height=4.5, units = "cm")  
+```
+
+
+## Figure 7d,e,f - Mural Polar TE - Petropolous
+```{r}
+
+
+Embeddings(pte, reduction = "umap") %>% as_tibble() %>%
+  mutate(ct = factor(pte$group)) %>%
+  #mutate(ct = factor(ct, levels=levels(ct)[c(2,9,10,1,8,5,4,3,7,6,11)])) %>% 
+  ggplot(., aes(UMAP_1, UMAP_2)) +
+  geom_point(aes(colour=ct), stroke=stroke, size=size) +
+  ggtitle("Cell type") +
+  #scale_color_manual(values = d6_cols) +
+  labs(x="UMAP1", y="UMAP2", colour=element_blank()) +
+  theme_panel() + 
+  theme(legend.position = "right",  legend.key.size = unit(0.3, "cm"), 
+        legend.margin = margin(l=-0.45,  unit = "cm"),
+        legend.spacing.x = unit(-0.05,"cm"),
+        plot.margin = margin(l=-0.1, unit = "cm")) +
+        guides(colour = guide_legend(ncol = 1, 
+                                     override.aes = list(size = 1.5) ))-> p;p
+
+ps = list()
+ps[[1]] = p
+for(m in c("mural1", "polar2")) {
+  ps[[m]] = signature_scoring_plot_plot(sig = m, pte) + 
+    ggtitle(gsub("[12]","",m)) +
+    theme_panel() +
+    theme(legend.position = "none",
+          axis.title.y = element_text(margin = margin(-0.4, unit = "cm")),
+          plot.margin = margin(b=0,unit = "cm"))
+}
+
+grid.arrange(grobs = lapply(
+ps,
+set_panel_size,
+width = unit(2.5, "cm"),
+height = unit(2.5, "cm")
+),nrow=1) -> p
+
+ggsave(p, filename = "../plots3/SuppFig7_mural_polar_sig_petro.pdf", height = 3.8, width = 12 , units = "cm")
+```
+
+
+```{r}
+cbind(Embeddings(pte, reduction = "umap"), pte@meta.data) %>%
+  as_tibble(rownames = "cell") %>%
+  dplyr::select("cell", "UMAP_1", "UMAP_2", "group", "mural1", "polar2") %>% 
+  rename("mural" = "mural1", "polar" = "polar2") %>% 
+  write.csv(., file = "../output/soft_data_table_petropolous_mural_polar.csv",
+            quote = FALSE, row.names = FALSE)
+```
+
+## Supp Figure 6g - Petropolous Signatures - Integrated
+```{r}
+ps = list()
+for(m in c("EPI", "TE", "PE")) {
+  ps[[m]] = signature_scoring_plot_plot(sig = m, blast.integrated_d6_blake_pet_noNR) + 
+    ggtitle(m) +
+    theme_panel()+
+    theme(legend.position = "none",
+          axis.title.y = element_text(margin = margin(-0.4, unit = "cm")))
+}
+grid.arrange(grobs = lapply(
+ps,
+set_panel_size,
+width = unit(2.5, "cm"),
+height = unit(2.5, "cm")
+),nrow=3) -> p
+ggsave(p, filename = "../plots3/SuppFig6_multi_sig_integrated.pdf", height = 12.5, width = 3.5 , units = "cm")
+```
+
+## Supp Figure 6d Intermediate Correlation Heatmap
+```{r}
+var_genes = intersect(seurat_d21@assays$SCT@var.features, row.names(seurat_d6@assays$SCT@data))
+
+as.matrix(seurat_d6@assays$SCT@data[var_genes,]) %>% 
+  as_tibble(rownames = "gene") %>%
+  gather("cell", "value", -gene) %>%
+  left_join(data.frame(cell = row.names(seurat_d6@meta.data), c = seurat_d6@active.ident)) %>%
+  group_by(c, gene) %>% summarise(value = mean(value)) %>%
+  spread(key = "c", value = "value") %>% as.data.frame() -> vmeans
+row.names(vmeans) = vmeans$gene
+names(vmeans) = paste("D6",names(vmeans), sep="_")
+
+as.matrix(seurat_d21@assays$SCT@data[var_genes,]) %>% 
+  as_tibble(rownames = "gene") %>%
+  gather("cell", "value", -gene) %>%
+  left_join(data.frame(cell = row.names(seurat_d21@meta.data), c = seurat_d21@active.ident)) %>%
+  group_by(c, gene) %>% summarise(value = mean(value)) %>%
+  spread(key = "c", value = "value") %>% as.data.frame() -> vmeans2
+row.names(vmeans2) = vmeans2$gene
+names(vmeans2) = paste("D21",names(vmeans2), sep="_")
+
+
+cor5 = cor(cbind(vmeans[,-1], vmeans2[,-1]))
+
+pheatmap::pheatmap(cor5, display_numbers = TRUE)
+
+pheatmap::pheatmap(cor5[grepl("D6_Intermed", row.names(cor3)), grepl("D21", colnames(cor3))], display_numbers = TRUE)
+
+pheatmap::pheatmap(cor5[grepl("D6_Intermed", row.names(cor5)), grepl("D21", colnames(cor5))], display_numbers = FALSE)
+
+pheatmap::pheatmap(cor5[grepl("D6_Intermed", row.names(cor5)), grepl("D21", colnames(cor5))], 
+                   #cutree_rows = 4, cutree_cols = 4, 
+                   treeheight_col = 15, treeheight_row = 15, fontsize = 7,
+                  # cellheight = 7,
+                   width = 9/cm(1), height = 4/cm(1), 
+                   filename = "../plots3/SuppFig6_IM_Correlation_Heatmap.pdf")
+```
+
+
+```{r}
+write.csv(cor5[grepl("D6_Intermed", row.names(cor5)), grepl("D21", colnames(cor5))],
+          file = "../output/soft_data_table_correlation_im_d21.csv",
+          row.names = TRUE, quote = FALSE)
+```
+
+## Supp Figure 6c - Day 21 Clustering UMAP
+```{r}
+Embeddings(seurat_d21, reduction = "umap") %>% as_tibble() %>%
+  mutate(ct = factor(seurat_d21$seurat_clusters)) %>%
+  #mutate(ct = factor(ct, levels=levels(ct)[c(2,9,10,1,8,5,4,3,7,6,11)])) %>% 
+  ggplot(., aes(UMAP_1, UMAP_2)) +
+  geom_point(aes(colour=ct), stroke=stroke, size=size) +
+  ggtitle("Cell clusters") +
+  labs(x="UMAP1", y="UMAP2", colour=element_blank()) +
+  theme_panel() + 
+  theme(legend.position = "right",  legend.key.size = unit(0.3, "cm"), 
+        legend.margin = margin(l=-0.45,  unit = "cm"),
+        legend.spacing.x = unit(-0.05,"cm"),
+        plot.margin = margin(l=-0.1, unit = "cm")) +
+        guides(colour = guide_legend(ncol = 1, 
+                                     override.aes = list(size = 1.5) ))-> p;p
+
+
+grid.arrange(grobs = lapply(
+list(p),
+set_panel_size,
+width = unit(2.5, "cm"),
+height = unit(2.5, "cm")
+),nrow=1) -> p
+
+ggsave(p, width = 5.5, height = 3.8, units = "cm", filename = 
+           "../plots3/SuppFig6_day21_umap.pdf")
+  
+```
+
+
+## Soft Data iBlasts
+```{r}
+supptable1 = seurat_iblastoids@meta.data
+supptable1 = cbind(supptable1, 
+                  t(seurat_iblastoids@assays$SCT@data[c("POU5F1", "CDX2", "SOX17", "NANOG","GATA2", "GATA3", "GATA6", "KRT8", "IFI27", "SENDAI-KLF4", "SENDAI-SEV", "SENDAI-MYC"),]))
+supptable1 = cbind(supptable1, 
+                  Embeddings(seurat_iblastoids, reduction = "umap"))
+
+write.csv(supptable1, file = "../output/soft_data_table_iBlastoids.csv", quote = FALSE)
+```
+
+## Soft Data iBlasts
+```{r}
+supptable2 = seurat_pet3@meta.data
+supptable2 = cbind(supptable2, 
+                  t(seurat_pet3@assays$RNA@data[c("POU5F1", "CDX2", "SOX17", "NANOG","GATA2", "GATA6"),]))
+supptable2 = cbind(supptable2, 
+                  Embeddings(seurat_pet3, reduction = "umap"))
+
+write.csv(supptable2, file = "../output/soft_data_table_petropolous.csv", quote = FALSE)
+```
+
+## Soft Data integrated
+```{r}
+supptable = blast.integrated_d6_blake_pet_noNR@meta.data
+supptable = cbind(supptable, 
+                  t(blast.integrated_d6_blake_pet_noNR@assays$integrated@data[c("POU5F1", "CDX2", "SOX17", "NANOG","GATA2", "GATA6"),]))
+supptable = cbind(supptable, 
+                  Embeddings(blast.integrated_d6_blake_pet_noNR, reduction = "umap"))
+
+write.csv(supptable, file = "../output/soft_data_table_integrated.csv", quote = FALSE)
+
+```
+
+
+## SuppFg 4c - Donor Localisation
+
+```{r}
+Embeddings(seurat_iblastoids, reduction = "umap") %>% as_tibble() %>% 
+  mutate(d = factor(seurat_iblastoids$donor)) %>% 
+  ggplot(., aes(UMAP_1, UMAP_2)) + 
+    geom_point(aes(colour=d), size=0.25, alpha=0.2) +
+  facet_wrap(~d) +
+    scale_color_manual(values = c("#f20e5e", "#0eaef2")) +
+  #scale_color_manual(values = c("#1ee6df", "#e64c1e")) +
+    theme_panel() +
+    theme(legend.position = "bottom",
+          legend.margin = margin(t=-0.4, unit = "cm")) +
+    labs(x="UMAP1", y="UMAP2", colour="donor") +
+    guides(colour = guide_legend(override.aes = list(size = 2)))-> p;p
+  
+#  ggsave(p, width = 8, height = 8, units = "cm", filename = 
+#           "../plots/donor_day6_umap.pdf")
+
+#q = UMAP_panel(list(p))
+
+ggsave(p, width = 8, height = 5.8, units = "cm", filename = 
+           "../plots3/SuppFig4_donor_day6_umap.pdf")  
+  
+```
+
+## SuppFig 4d - Cell Cycle
+```{r}
+Embeddings(seurat_iblastoids, reduction = "umap") %>% as_tibble() %>% 
+  mutate(cc = factor(seurat_iblastoids$phase)) %>% 
+  ggplot(., aes(UMAP_1, UMAP_2)) + 
+    geom_point(aes(colour=cc), size=0.25) +
+    scale_color_manual(values = c("darkgrey",  "#4ae7ff", "#ff7d4a")) +
+    labs(x="UMAP1", y="UMAP2", colour=element_blank()) +
+    theme_panel() +
+    theme(legend.position = "bottom", 
+          legend.margin = margin(l=-0.6, t=-0.4, unit = "cm")) +
+   
+    guides(colour = guide_legend(override.aes = list(size = 2)))-> p;p
+ 
+
+ggsave(p, width = 5, height = 5.8, units = "cm", filename = 
+           "../plots3/SuppFig4_cell_cycle_umap.pdf")
+```
+
+## SuppFig 4e - Virus Expression
+```{r}
+p = UMAP_panel(list("p1" = marker_plot_plot("SENDAI-KLF4", seurat_iblastoids) + 
+                      theme(legend.margin = margin(l=-0.5, unit = "cm")), 
+                    "p2" = marker_plot_plot("SENDAI-SEV", seurat_iblastoids)+ 
+                      theme(legend.margin = margin(l=-0.5, unit = "cm")),
+                    "p3" = marker_plot_plot("SENDAI-MYC", seurat_iblastoids)+ 
+                      theme(legend.margin = margin(l=-0.5, unit = "cm"))), nrow = 1)
+
+
+ggsave(p, filename = "../plots/SuppFig4_SENDAIs.pdf", height = 5.5, width = 16.5, units = "cm")
+
+
+
+ps = list()
+for(m in c("SENDAI-KLF4", "SENDAI-SEV", "SENDAI-MYC")) {
+    ps[[m]] = marker_plot_plot(m, seurat_iblastoids) + 
+    ggtitle(m) +
+    theme_panel() +
+    theme(legend.position = "none",
+          axis.title.y = element_text(margin = margin(-0.4, unit = "cm")))
+}
+grid.arrange(grobs = lapply(
+ps,
+set_panel_size,
+width = unit(2.5, "cm"),
+height = unit(2.5, "cm")
+),nrow=1) -> p
+ggsave(p, filename = "../plots3/SuppFig4_virus_iBlast.pdf", height = 3.8, width = 11 , units = "cm")
+```
+
+
+
+## SuppFig5a,b - non reprogramming signature
+  
+```{r}
+ps = list(signature_scoring_plot_plot("nonReprog1", seurat_iblastoids) + 
+            ggtitle("non reprog sig") + theme_panel() +
+            theme(legend.position = "none"),
+          marker_plot_plot("IFI27", seurat_iblastoids) +
+            ggtitle("IFI27 expression") + theme_panel() +
+            theme(legend.position = "none"))
+grid.arrange(grobs = lapply(
+ps,
+set_panel_size,
+width = unit(2.5, "cm"),
+height = unit(2.5, "cm")
+),nrow=1) -> p
+ggsave(p, filename = "../plots3/SuppFig5_nonReprogramming.pdf", height = 3.5, width = 7.5, units = "cm")
+```
+
+## SuppFig 4f - Markers - Petroploous
+```{r}
+ps = list()
+for(m in c("POU5F1", "CDX2", "SOX17", "NANOG","GATA2", "GATA6")) {
+  ps[[m]] = marker_plot_plot(m, seurat_pet3) + 
+    ggtitle(m) +
+    theme_panel()+
+    theme(
+          legend.position = "none",
+            axis.title.y = element_text(margin = margin(-0.4, unit = "cm"))
+          )
+}
+grid.arrange(grobs = lapply(
+ps,
+set_panel_size,
+width = unit(2.5, "cm"),
+height = unit(2.5, "cm")
+),nrow=2) -> p
+ggsave(p, filename = "../plots3/SuppFig4_multi_marker_petro.pdf", height = 7.7, width = 11, units = "cm")
+```
+
+## SuppFig 5d -  multi signatures - iBlast
+```{r}
+ps = list()
+for(i in c("E5", "E6", "E7")) {
+  for(j in c("EPI", "PE", "TE")){
+    s=paste(i,j,sep=".")
+    ps[[s]] = signature_scoring_plot_plot(s, seurat_iblastoids) +
+      ggtitle(s)+
+      theme_panel() +
+      theme(legend.position = "none") 
+  }
+}
+
+grid.arrange(grobs = lapply(
+ps,
+set_panel_size,
+width = unit(2.5, "cm"),
+height = unit(2.5, "cm")
+),nrow=3) -> p
+ggsave(p, filename = "../plots3/SuppFig5_multi_signature_iBlas.pdf", height = 11, width = 11, units = "cm")
+```
+
+## SuppFig 5c -  multi signatures - Petropolous
+```{r}
+ps = list()
+for(i in c("E5", "E6", "E7")) {
+  for(j in c("EPI", "PE", "TE")){
+    s=paste(i,j,sep=".")
+    ps[[s]] = signature_scoring_plot_plot(s, seurat_pet3) +
+      ggtitle(s)+
+      theme_panel() +
+      theme(legend.position = "none") 
+  }
+}
+
+grid.arrange(grobs = lapply(
+ps,
+set_panel_size,
+width = unit(2.5, "cm"),
+height = unit(2.5, "cm")
+),nrow=3) -> p
+ggsave(p, filename = "../plots3/SuppFig5_multi_signature_petro.pdf", height = 11, width = 11, units = "cm")
+```
+
+## SuppFig6a - Day 6 Donor Proportions
+```{r}
+seurat_iblastoids@meta.data %>% as_tibble() %>% 
+  group_by(celltype) %>% mutate(tot=n()) %>%
+  group_by(celltype, donor) %>% summarise(f=n()/tot[1]*100) %>%
+  ggplot(., aes(celltype, f)) +
+  geom_bar(stat = "identity", aes(fill=donor), colour="black", width = 0.8) +
+  theme_panel() +
+  scale_fill_manual(values = c("#f20e5e", "#0eaef2")) +
+  labs(x="cluster id", y="percent (%)", fill=element_blank()) +
+  coord_flip() +
+  theme(legend.position = "bottom",
+        legend.key.size = unit(0.2,"cm"),
+        legend.margin = margin(t=-0.3,unit = "cm")) -> p;p
+
+ggsave(p, filename = "../plots3/SuppFig6_donor_percentage.pdf",
+       width = 6, height=4.5, units = "cm")
+
+```
+
+```{r}
+seurat_iblastoids@meta.data %>% as_tibble() %>% 
+  group_by(celltype) %>% mutate(tot=n()) %>%
+  group_by(celltype, donor) %>% summarise(f=n()/tot[1]*100) %>%
+  write.csv(., file = "../output/soft_data_table_iBlast_donor_proportions.csv", 
+            quote = FALSE, row.names = FALSE)
+```
+
+
+## SuppFig6b - Day 6 Expression Heatmaps
+```{r}
+#markers_d6 = FindAllMarkers(seurat_d6, only.pos = TRUE)
+
+
+top10 <- iBlastoids_cluster_markers %>% group_by(cluster) %>% top_n(n = 10, wt = avg_logFC)  %>%
+  arrange(cluster)
+
+DoHeatmap(seurat_iblastoids, features = top10$gene, group.colors = d6_cols) + NoLegend() +
+  scale_fill_gradientn(colours = rev(brewer.pal(n = 10, name =
+ "RdYlBu"))) +
+  theme(text = element_text(family = "Arial", size = 15, colour = "black", face = "bold"), 
+        plot.margin = margin(r=2,unit = "cm"))->p;p
+
+ggsave(p, filename = "../plots3/SuppFig6_heatmap_d6_markers.pdf", height=30, width=21, units = "cm")
+```
+
+## Supp Figure 6e - Libraries UMAP
+
+```{r}
+
+lib_cols = c("Blakeley" = "#ffdb0d", "iBlastoids" = "#0d9eff", "Petropolous" ="#ff0d56")
+#DimPlot(blast.integrated_d6_blake_pet_pre_4k, group.by = "orig.ident")
+
+Embeddings(blast.integrated_d6_blake_pet_noNR, reduction = "umap") %>% as_tibble() %>%
+  mutate(lib = blast.integrated_d6_blake_pet_noNR$orig.ident) -> plot_data 
+
+ggplot() + 
+  geom_point(data = plot_data %>% filter(lib == "iBlastoids"),
+             aes(x=UMAP_1, y=UMAP_2,colour=lib, shape=lib), 
+             size= 0.5, alpha=0.8) +
+  geom_point(data = plot_data %>% filter(lib == "Petropolous"),
+             aes(x=UMAP_1, y=UMAP_2, shape=lib), 
+            colour="black", size = 1.25) +
+  geom_point(data = plot_data %>% filter(lib == "Petropolous"),
+             aes(x=UMAP_1, y=UMAP_2,colour=lib, shape=lib), 
+            size = 0.9, alpha=1) +
+
+   geom_point(data = plot_data %>% filter(lib == "Blakeley"),
+             aes(x=UMAP_1, y=UMAP_2,shape = lib),
+                 colour="black", size=2.1) +
+  geom_point(data = plot_data %>% filter(lib == "Blakeley"),
+             aes(x=UMAP_1, y=UMAP_2,colour=lib, shape=lib),
+                size=1.75, alpha=1) +
+  scale_color_manual(values = lib_cols) +
+  scale_shape_manual(values = c("square", "circle","triangle")) +
+  labs( x="UMAP1", y="UMAP2", colour=element_blank(), shape=element_blank()) +
+  theme_panel() +
+  theme(legend.position = "bottom", legend.margin = margin(t=-0.3,unit = "cm")) -> p; p
+ggsave(p, filename = "../plots3/SuppFig6_integration_umap_lib.pdf",
+       width = 8, height=7, units = "cm")
+
+```
+
+
+## SuppFig 6f - Markers - Integrated
+```{r}
+ps = list()
+for(m in c("POU5F1", "CDX2", "SOX17", "NANOG","GATA2", "GATA6")) {
+  ps[[m]] = marker_plot_plot(m, blast.integrated_d6_blake_pet_noNR) + 
+    ggtitle(m) +
+    theme_panel()+
+    theme(
+          legend.position = "none",
+            axis.title.y = element_text(margin = margin(-0.4, unit = "cm"))
+          )
+}
+grid.arrange(grobs = lapply(
+ps,
+set_panel_size,
+width = unit(2.5, "cm"),
+height = unit(2.5, "cm")
+),nrow=2) -> p
+ggsave(p, filename = "../plots3/SuppFig6_multi_marker_integrated.pdf", height = 7.7, width = 11, units = "cm")
+```
+
+## Supp Figure 1a,l - Petropolous Signatures D21
+```{r}
+ps = list()
+for(m in c("EPI", "PE", "TE", "nonReprog1")) {
+  ps[[m]] = signature_scoring_plot_plot(sig = m, seurat_2074) + 
+    ggtitle(m) +
+    theme(text = element_text(family = "Arial",size = 7),
+          line = element_line(size=0.25), legend.position = "none",
+          axis.title.y = element_text(margin = margin(-0.4, unit = "cm")))
+}
+grid.arrange(grobs = lapply(
+ps,
+set_panel_size,
+width = unit(2.5, "cm"),
+height = unit(2.5, "cm")
+),nrow=1) -> p
+ggsave(p, filename = "../plots3/SuppFig1_multi_sig_D21.pdf", height = 3.8, width = 14 , units = "cm")
+```
+
+## Soft Data D21
+```{r}
+supptable1 = seurat_d21@meta.data
+supptable1 = cbind(supptable1, 
+                  Embeddings(seurat_d21, reduction = "umap"))
+
+write.csv(supptable1[,c("EPI","TE","PE","nonReprog1","UMAP_1", "UMAP_2", "seurat_clusters")], file = "../output/soft_data_table_D21.csv", quote = FALSE)
+```
+
+## Cell Proportions D21
+
+```{r}
+DimPlot(seurat_2074, group.by = "clusters", label = TRUE)
+seurat_2074$likeness = recode(seurat_2074$clusters,
+                              "0"="EPI","1"="PE","2"="EPI","3"="EPI","4"="EPI",
+                              "5"="PE","6"="other","7"="TE","8"="EPI")
+DimPlot(seurat_2074, group.by = "likeness", label = TRUE)
+table(seurat_2074$likeness)
+seurat_2074@meta.data %>% mutate(tot = n()) %>%
+  group_by(likeness) %>% summarise(prop = n()/tot[1])
+```
+
+```{r}
+FeaturePlot(seurat_2074, features = c("EPI","TE","PE", "FIB"))
+
+ggplot(data=data.frame(EPI=seurat_2074$EPI, TE=seurat_2074$TE, 
+                       PE=seurat_2074$PE, FIB=seurat_2074$FIB) %>%
+         gather("signature", "value"), aes(value, ..density..)) +
+  geom_density() +
+  facet_wrap(~signature, scales = "free") +
+  geom_vline(data=data.frame(signature = c("EPI","TE","PE", "FIB"),
+                             i = c(-0.05,-0.1,0.05,0.5)), 
+             aes(xintercept = i), linetype="dashed") +
+  theme_classic()
+```
+
+```{r}
+table(seurat_2074$FIB>0.5, seurat_2074$PE > 0.05)
+```
+
+
+## Fig ?? ICM TE Grade
+
+```{r}
+wb = openxlsx::readWorkbook("~/projects/Ethan_iBlastoids/data/scoring_iBlast_rearranged.xlsx")
+
+wb %>% gather("type", "value", -New.ID, -Original.ID) %>% group_by(type) %>%
+  summarise(m = mean(value)) -> means
+
+ggplot(wb %>% gather("type", "value", -New.ID, -Original.ID), aes(value, ..count..)) + 
+  geom_bar(aes(fill=type), color = "black")+
+  facet_wrap(~type) +
+  geom_text(data= means, aes(x=1, y=17, label=paste("mu==",round(m,2))), parse = TRUE) +
+  scale_fill_manual(values = c("white", "grey")) +
+  theme_classic() +
+  theme(legend.position = "none") +
+  labs(x="grade")
+```
+
+
+## Supp Figure 4g Expression
+
+```{r}
+ps = list()
+for(m in c("GATA3", "TFAP2A", "KRT18", "KRT8")) {
+  ps[[m]] = marker_plot_plot(m, seurat_iblastoids) + 
+    ggtitle(m) +
+    theme_panel()+
+    theme(
+          legend.position = "none",
+            axis.title.y = element_text(margin = margin(-0.4, unit = "cm"))
+          )
+}
+grid.arrange(grobs = lapply(
+ps,
+set_panel_size,
+width = unit(2.5, "cm"),
+height = unit(2.5, "cm")
+),nrow=1) -> p
+ggsave(p, filename = "~/projects/Ethan_iBlastoids/plots3/SuppFig4_multi_marker_iBlast.pdf", 
+       height = 4, width = 15, units = "cm")
+```
+
+
+## Figure X Expression
+
+```{r}
+ps = list()
+for(m in c("CDX2", "GATA6", "NANOG")) {
+  ps[[m]] = plotto_marker_plot(m, seurat_d21) 
+    # ggtitle(m) +
+    # theme_panel()+
+    # theme(
+    #       legend.position = "none",
+    #         axis.title.y = element_text(margin = margin(-0.4, unit = "cm"))
+    #       )
+}
+p = plotto_panel_it(ps)
+ggsave(p, filename = "~/projects/Ethan_iBlastoids/plots3/FigX_multi_marker_d21.pdf", 
+       height = 4, width = 12, units = "cm")
+```
+
+
+## Figure X - Petropolous sigantures NR
+```{r}
+p = plotto_panel_it(list(plotto_signature_scoring_plot("ALL.EPI", petro) 
+                         + ggtitle("ALL.EPI") + theme(legend.position = "none"),
+                         plotto_signature_scoring_plot("ALL.TE", petro)
+                         + ggtitle("ALL.TE") + theme(legend.position = "none"),
+                         plotto_signature_scoring_plot("ALL.PE", petro)
+                         + ggtitle("ALL.PE") + theme(legend.position = "none"),
+                         plotto_signature_scoring_plot("nonReprog1", petro)
+                         + ggtitle("nonReprog1") + theme(legend.position = "none")))
+ggsave(p, filename = "~/projects/Ethan_iBlastoids/plots3/FigX_multi_sig_petro_NR.pdf", height = 3.8, width = 15 , units = "cm")
+
+```
+
