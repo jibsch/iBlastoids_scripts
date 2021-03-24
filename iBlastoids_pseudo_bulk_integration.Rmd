@@ -1,0 +1,160 @@
+---
+title: "iBlastoids_SC_bulk_integration"
+author: "jibsch"
+date: "2021-01-18"
+output: workflowr::wflow_html
+editor_options:
+  chunk_output_type: inline
+---
+
+## Gene Lengths for RPKM
+
+```{r}
+GL = read_tsv("~/references/human/Homo_sapiens.GRCh38.93.gene_lengths.tsv")
+GL$symbol = mapIds(org.Hs.eg.db, GL$`Gene stable ID`, "ENSEMBL", column = "SYMBOL")
+summary(duplicated(GL$symbol))
+GL = GL[!duplicated(GL$symbol) & ! is.na(GL$symbol),]
+Gl = as.data.frame(GL)
+row.names(GL) = GL$symbol
+```
+
+## Load Libraries and create Pseudo Bulk
+
+```{r}
+blake = readRDS("../output/blake.Rds")
+pet = readRDS("../output/seurat_pet3.Rds")
+blake.TE = rowSums(as.matrix(blake@assays$RNA@counts[,blake$group == "TE"]))
+blake.PE = rowSums(as.matrix(blake@assays$RNA@counts[,blake$group == "PE"]))
+blake.EPI = rowSums(as.matrix(blake@assays$RNA@counts[,blake$group == "EPI"]))
+
+iblast.TE.rep1 = rowSums(as.matrix(seurat_d6@assays$RNA@counts[,seurat_d6$cell_type2 == "TE" & seurat_d6$donor == "donor0"]))
+iblast.TE.rep2 = rowSums(as.matrix(seurat_d6@assays$RNA@counts[,seurat_d6$cell_type2 == "TE" & seurat_d6$donor != "donor0"]))
+iblast.PE.rep1 = rowSums(as.matrix(seurat_d6@assays$RNA@counts[,seurat_d6$cell_type2 == "PE" & seurat_d6$donor == "donor0"]))
+iblast.PE.rep2 = rowSums(as.matrix(seurat_d6@assays$RNA@counts[,seurat_d6$cell_type2 == "PE" & seurat_d6$donor != "donor0"]))
+iblast.EPI.rep1 = rowSums(as.matrix(seurat_d6@assays$RNA@counts[,seurat_d6$cell_type2 == "EPI" & seurat_d6$donor == "donor0"]))
+iblast.EPI.rep2 = rowSums(as.matrix(seurat_d6@assays$RNA@counts[,seurat_d6$cell_type2 == "EPI" & seurat_d6$donor != "donor0"]))
+
+pet.TE.E5 = rowSums(as.matrix(pet@assays$RNA@counts[,pet$group == "E5_TE"]))
+pet.PE.E5 = rowSums(as.matrix(pet@assays$RNA@counts[,pet$group == "E5_PE"]))
+pet.EPI.E5 = rowSums(as.matrix(pet@assays$RNA@counts[,pet$group == "E5_Epi"]))
+
+pet.TE.E6 = rowSums(as.matrix(pet@assays$RNA@counts[,pet$group == "E6_TE"]))
+pet.PE.E6 = rowSums(as.matrix(pet@assays$RNA@counts[,pet$group == "E6_PE"]))
+pet.EPI.E6 = rowSums(as.matrix(pet@assays$RNA@counts[,pet$group == "E6_Epi"]))
+
+pet.TE.E7 = rowSums(as.matrix(pet@assays$RNA@counts[,pet$group == "E7_TE"]))
+pet.PE.E7 = rowSums(as.matrix(pet@assays$RNA@counts[,pet$group == "E7_PE"]))
+pet.EPI.E7 = rowSums(as.matrix(pet@assays$RNA@counts[,pet$group == "E7_Epi"]))
+```
+
+```{r}
+okae = read.table("../data/Arima_logFPKM.txt", header = TRUE, sep="\t")
+okae = okae[!duplicated(okae$Gene.symbol),]
+row.names(okae) = okae$Gene.symbol
+
+okae_group = gsub("_rep[1-3]","",names(okae)[-c(1:2)])
+```
+
+
+## Select Okae and Linneberg Samples
+```{r}
+okae.select = startsWith(names(okae), "TSCT") | startsWith(names(okae), "TSblast")
+cpm = removeBatchEffect(cbind(cpm(dge, log = TRUE), okae[g,okae.select]), batch = c(rep("B",3), rep("L",3), rep("P",9), rep("O",4)))
+
+
+```{r}
+linneberg = read.csv("../data/GSE138012_supplemental_data_1.csv", header=TRUE, as.is = TRUE)
+linneberg$gene_symbol = mapIds(org.Hs.eg.db, linneberg$gene_id, "ENSEMBL", 
+                               column = "SYMBOL")
+summary(duplicated(linneberg$gene_symbol) & !is.na(linneberg$gene_symbol))
+linneberg = linneberg[!duplicated(linneberg$gene_symbol) & !is.na(linneberg$gene_symbol),]
+row.names(linneberg) = linneberg$gene_symbol
+
+l = names(linneberg)
+linneberg.select = startsWith(l, "H9_t2iLGo_PrE") | startsWith(l, "H9_t2iLGo_nEnd") | 
+  #startsWith(l, "H9_MEF_pES")  | 
+  startsWith(l, "H9_t2iLGo_nES")
+linneberg.group = gsub("_R[1-3]","",l[linneberg.select])
+```
+
+## Integrate Data
+
+
+```{r}
+  
+
+dge = DGEList(cbind(data.frame(blake.TE = blake.TE[g]/data.frame(GL)[g,3], 
+                               blake.EPI = blake.EPI[g]/data.frame(GL)[g,3],
+                         blake.PE = blake.PE[g]/data.frame(GL)[g,3],
+                         iblast.TE.rep1 = iblast.TE.rep1[g], 
+                         iblast.EPI.rep1 = iblast.EPI.rep1[g],
+                         iblast.PE.rep1 = iblast.PE.rep1[g],
+                         iblast.TE.rep2 = iblast.TE.rep2[g],
+                         iblast.EPI.rep2 = iblast.EPI.rep2[g],
+                         iblast.PE.rep2 = iblast.PE.rep2[g],
+                         pet.TE.E5 = pet.TE.E5[g], pet.EPI.E5 = pet.EPI.E5[g],
+                         pet.PE.E5 = pet.PE.E5[g],
+                         pet.TE.E6 = pet.TE.E6[g], pet.EPI.E6 = pet.EPI.E6[g],
+                         pet.PE.E6 = pet.PE.E6[g],
+                         pet.TE.E7 = pet.TE.E7[g], pet.EPI.E7 = pet.EPI.E7[g],
+                         pet.PE.E7 = pet.PE.E7[g]
+                         ),
+                    linneberg[g,linneberg.select]))
+
+dge = calcNormFactors(dge)
+
+
+cpm = removeBatchEffect(cbind(cpm(dge, log = TRUE), okae[g,okae.select]), batch = c(rep("B",3), rep("L",6), rep("P",9), rep("Lin",9), rep("O",4)))
+#rep("B",3), 
+
+pca = prcomp(t(cpm))
+
+```
+
+
+```{r}
+cols = c("EPI" = "#4169E1", 
+            "PE" = "#698B22", 
+            "TE" = "#A020F0", 
+            "H9_t2iLGo_nEnd" = "turquoise2",
+            "H9_t2iLGo_nES" = "orange",
+            "H9_t2iLGo_PrE" = "red",
+            "TSblast" = "black", "TSCT" = "darkgrey",
+            "Int_IM1" = "#8B1A1A", "Int_IM2" = "#FF3030", "Int_IM3" = "#F08080",
+            "Int_nonReprog" = "black")
+
+label = pca$x %>% as_tibble(rownames = "sample") %>%
+  mutate(b=b, t=t, bt = paste(b,t,sep="_")) %>%
+  group_by(bt) %>%
+  summarise(PC1=mean(PC1), PC2=mean(PC2), t=t[1])
+
+
+
+as_tibble(pca$x, rownames = "sample") %>% 
+  mutate(b=b, t=t) %>%
+  ggplot(aes(PC1, PC2)) + 
+  geom_point(aes(colour = t), size=2) +
+  #geom_text_repel(aes(colour=t, label=sample), show.legend = FALSE, size=1.5) +
+  labs(colour="type", x = "PC1 (34%)", y="PC2 (18%)") +
+  scale_color_manual(values = cols) +
+  plotto_theme_panel() + 
+  theme(legend.position = "bottom") -> p
+
+ggsave(p, filename = "../plots3/SuppfigX_integration.pdf", width = 9, height=9, units = "cm")
+
+p = p + geom_text_repel(data=label, aes(x=PC1, y=PC2,colour=t, label=bt), 
+                  show.legend = FALSE, size=2.5, point.padding = 0.5) 
+
+ggsave(p, filename = "../plots3/SuppfigX_integration2.pdf", width = 9, height=9, units = "cm")
+```
+
+## Soft Data
+
+```{r}
+as_tibble(pca$x, rownames="sample") %>%
+  dplyr::select(sample, PC1, PC2) %>% 
+  mutate(type = t) -> t
+
+write.csv(t, row.names = FALSE, quote = FALSE, file = "../output/soft_data_table_bulk_integration_pca.csv")
+```
+
