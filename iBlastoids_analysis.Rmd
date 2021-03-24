@@ -120,7 +120,7 @@ seurat_iblastoids = CreateSeuratObject(Read10X("../data/RL2157_2020_06_24_20_217
 seurat_iblastoids[["percent.mt"]] <- PercentageFeatureSet(seurat_iblastoids, pattern = "^MT-")
 
 # Load table of cell line donors
-donors = read_tsv("~/projects/Ethan_iBlastoids/data/donor_ids.tsv")
+donors = read_tsv("../data/donor_ids.tsv")
 
 summary(row.names(seurat_iblastoids@meta.data) == donors$cell)
 
@@ -189,7 +189,7 @@ nature_sig = read.table("../data/suppTable03.tab",
            header=TRUE, sep="\t", as.is = TRUE)
 nature_sig.list = split(nature_sig$geneName, f=factor(nature_sig$module))
 
-petro_sig = read.table("~/projects/Ethan_iBlastoids/data/suppTable12.tab", 
+petro_sig = read.table("../data/suppTable12.tab", 
            header=TRUE, sep="\t", as.is = TRUE)
 
 petro_sig.list = split(petro_sig$geneName, f=factor(petro_sig$type))
